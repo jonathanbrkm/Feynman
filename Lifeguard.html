@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+<meta charset="UTF-8">
+<title>בעיית המציל</title>
+<style>
+body { font-family: Arial; text-align: center; }
+canvas { border:1px solid black; }
+</style>
+</head>
+<body>
+
+<h2>בעיית המציל</h2>
+
+<canvas id="canvas" width="600" height="400"></canvas>
+<br>
+<input type="range" id="slider" min="0" max="10" step="0.01" value="5">
+<p id="time"></p>
+<button onclick="optimal()">מסלול אופטימלי</button>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+let L=10;
+let y1=5, y2=-3;
+let v1=2, v2=5;
+
+function draw(x_cross){
+    ctx.clearRect(0,0,600,400);
+
+    // background
+    ctx.fillStyle="#f5deb3";
+    ctx.fillRect(0,0,600,200);
+
+    ctx.fillStyle="#87cefa";
+    ctx.fillRect(0,200,600,200);
+
+    let scale=50;
+
+    let A = {x:0, y:y1};
+    let B = {x:L, y:y2};
+    let C = {x:x_cross, y:0};
+
+    function map(p){
+        return {x:p.x*scale+50, y:200 - p.y*scale};
+    }
+
+    let mA=map(A), mB=map(B), mC=map(C);
+
+    ctx.beginPath();
+    ctx.moveTo(mA.x,mA.y);
+    ctx.lineTo(mC.x,mC.y);
+    ctx.lineTo(mB.x,mB.y);
+    ctx.strokeStyle="blue";
+    ctx.lineWidth=2;
+    ctx.stroke();
+
+    let d1 = Math.hypot(x_cross, y1);
+    let d2 = Math.hypot(L-x_cross, y2);
+    let T = d1/v1 + d2/v2;
+
+    document.getElementById("time").innerText = "זמן: " + T.toFixed(3);
+}
+
+document.getElementById("slider").oninput = function(){
+    draw(parseFloat(this.value));
+};
+
+function optimal(){
+    let bestX=0, bestT=Infinity;
+    for(let x=0;x<=L;x+=0.01){
+        let d1 = Math.hypot(x,y1);
+        let d2 = Math.hypot(L-x,y2);
+        let T = d1/v1 + d2/v2;
+        if(T<bestT){
+            bestT=T;
+            bestX=x;
+        }
+    }
+    document.getElementById("slider").value = bestX;
+    draw(bestX);
+}
+
+draw(5);
+</script>
+
+</body>
+</html>

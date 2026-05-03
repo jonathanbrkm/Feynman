@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>שני סדקים – פוטונים אחד־אחד</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#111a33; --text:#e9eefc; --muted:#aab4d6; --grid:#22305c; }
+    body{ margin:0; font-family:system-ui,Segoe UI,Arial; background:var(--bg); color:var(--text); }
+    .wrap{ display:grid; grid-template-columns: 360px 1fr; gap:16px; padding:16px; }
+    .panel{ background:var(--panel); border:1px solid #1c2a55; border-radius:14px; padding:14px; }
+    h1{ font-size:18px; margin:0 0 10px 0; }
+    .row{ display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center; margin:10px 0; }
+    label{ font-size:13px; color:var(--muted); }
+    input[type="range"]{ width:100%; }
+    .val{ font-variant-numeric: tabular-nums; color:var(--text); font-size:13px; }
+    .btns{ display:flex; gap:10px; margin-top:12px; }
+    button{
+      background:#20346d; border:1px solid #2c4693; color:var(--text);
+      padding:10px 12px; border-radius:10px; cursor:pointer; font-weight:600;
+    }
+    button:hover{ filter:brightness(1.08); }
+    .hint{ font-size:12px; color:var(--muted); line-height:1.35; margin-top:10px; }
+    .main{ display:grid; grid-template-rows: 1fr 180px; gap:16px; }
+    canvas{ width:100%; height:100%; background:#050816; border:1px solid #1c2a55; border-radius:14px; }
+    .stats{ display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--muted); margin-top:10px; flex-wrap:wrap; }
+    .pill{ padding:6px 10px; background:#0a1230; border:1px solid #1c2a55; border-radius:999px; }
+    .small{ font-size:11px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>סימולציית שני סדקים (פוטונים אחד־אחד)</h1>
+
+      <div class="row">
+        <label>אורך גל (נ״מ) / צבע</label>
+        <div class="val"><span id="wlVal"></span></div>
+      </div>
+      <input id="wl" type="range" min="380" max="700" step="1" value="550"/>
+
+      <div class="row">
+        <label>מרחק בין הסדקים d (מ״מ)</label>
+        <div class="val"><span id="dVal"></span></div>
+      </div>
+      <input id="d" type="range" min="0.10" max="2.50" step="0.01" value="0.50"/>
+
+      <div class="row">
+        <label>רוחב סדק a (מיקרון)</label>
+        <div class="val"><span id="aVal"></span></div>
+      </div>
+      <input id="a" type="range" min="5" max="200" step="1" value="30"/>
+
+      <div class="row">
+        <label>מרחק למסך L (מ׳)</label>
+        <div class="val"><span id="LVal"></span></div>
+      </div>
+      <input id="L" type="range" min="0.20" max="3.00" step="0.01" value="1.00"/>
+
+      <div class="row">
+        <label>קצב פוטונים (נקודות/שניה)</label>
+        <div class="val"><span id="rateVal"></span></div>
+      </div>
+      <input id="rate" type="range" min="50" max="3000" step="10" value="600"/>
+
+      <div class="row">
+        <label>רוחב מסך מוצג (ס״מ) – חצי טווח</label>
+        <div class="val"><span id="halfWVal"></span></div>
+      </div>
+      <input id="halfW" type="range" min="1" max="20" step="0.5" value="8"/>
+
+      <div class="row">
+        <label>״מריחה״ של נקודה (פיקסלים)</label>
+        <div class="val"><span id="blurVal"></span></div>
+      </div>
+      <input id="blur" type="range" min="0" max="3" step="1" value="1"/>
+
+      <div class="btns">
+        <button id="toggle">הפעל</button>
+        <button id="reset">אפס מסך</button>
+      </div>
+
+      <div class="stats">
+        <div class="pill">נקודות: <span id="count">0</span></div>
+        <div class="pill">מודל: התאבכות × מעטפת עקיפה</div>
+      </div>
+
+      <div class="hint">
+        כל פוטון פוגע במסך ומשאיר נקודה. עם הזמן מתקבלת תבנית ההתאבכות.
+        שינוי הפרמטרים משנה את התמונה המצטברת.
+      </div>
+      <div class="small">
+        הדמיה חינוכית של התפלגות פגיעות (לא מסלולי פוטונים).
+      </div>
+    </div>
+
+    <div class="main">
+      <canvas id="screen"></canvas>
+      <canvas id="plot"></canvas>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const screen = document.getElementById('screen');
+  const plot = document.getElementById('plot');
+  const ctx = screen.getContext('2d');
+  const pctx = plot.getContext('2d');
+
+  const wl = document.getElementById('wl');
+  const d = document.getElementById('d');
+  const a = document.getElementById('a');
+  const L = document.getElementById('L');
+  const rate = document.getElementById('rate');
+  const halfW = document.getElementById('halfW');
+  const blur = document.getElementById('blur');
+  const toggle = document.getElementById('toggle');
+  const reset = document.getElementById('reset');
+  const countSpan = document.getElementById('count');
+
+  let running = false;
+  let photonCount = 0;
+  const BINS = 400;
+  let hist = new Array(BINS).fill(0);
+
+  function resize() {
+    screen.width = screen.clientWidth;
+    screen.height = screen.clientHeight;
+    plot.width = plot.clientWidth;
+    plot.height = plot.clientHeight;
+    clear();
+    drawPlot();
+  }
+
+  window.addEventListener('resize', resize);
+
+  function clear() {
+    ctx.fillStyle = '#050816';
+    ctx.fillRect(0,0,screen.width,screen.height);
+  }
+
+  function sinc(x) {
+    if (Math.abs(x) < 1e-6) return 1;
+    return Math.sin(x)/x;
+  }
+
+  function intensity(x, lambda, d, a, L) {
+    const k1 = Math.PI * d * x / (lambda * L);
+    const k2 = Math.PI * a * x / (lambda * L);
+    return Math.cos(k1)**2 * sinc(k2)**2;
+  }
+
+  function sampleX(params, Imax) {
+    for (let i=0;i<10000;i++) {
+      const x = (Math.random()*2 - 1) * params.halfW;
+      if (Math.random()*Imax <= intensity(x, params.lambda, params.d, params.a, params.L))
+        return x;
+    }
+    return 0;
+  }
+
+  function drawHit(x, params) {
+    const px = (x/params.halfW + 1)/2 * screen.width;
+    const py = screen.height/2 + (Math.random()-0.5)*100;
+    ctx.fillStyle = 'white';
+    ctx.fillRect(px, py, 1, 1);
+    const bin = Math.floor((x/params.halfW + 1)/2 * BINS);
+    if (bin>=0 && bin<BINS) hist[bin]++;
+  }
+
+  function drawPlot() {
+    pctx.fillStyle = '#050816';
+    pctx.fillRect(0,0,plot.width,plot.height);
+    const max = Math.max(...hist,1);
+    for (let i=0;i<BINS;i++) {
+      const h = hist[i]/max * plot.height;
+      pctx.fillStyle = '#e9eefc';
+      pctx.fillRect(i*plot.width/BINS, plot.height-h, plot.width/BINS, h);
+    }
+  }
+
+  toggle.onclick = () => {
+    running = !running;
+    toggle.textContent = running ? 'עצור' : 'הפעל';
+  };
+
+  reset.onclick = () => {
+    photonCount = 0;
+    hist.fill(0);
+    countSpan.textContent = '0';
+    clear();
+    drawPlot();
+  };
+
+  function loop() {
+    if (running) {
+      const params = {
+        lambda: wl.value*1e-9,
+        d: d.value*1e-3,
+        a: a.value*1e-6,
+        L: L.value,
+        halfW: halfW.value*1e-2
+      };
+      let Imax = 1;
+      for (let i=0;i<rate.value/60;i++) {
+        const x = sampleX(params, Imax);
+        drawHit(x, params);
+        photonCount++;
+      }
+      countSpan.textContent = photonCount;
+      if (photonCount % 200 === 0) drawPlot();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  loop();
+})();
+</script>
+</body>
+</html>
